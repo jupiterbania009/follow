@@ -7,31 +7,39 @@ const getInstagramClient = (username, password) => {
   return new InstagramAPI({
     username,
     password,
-    cookieStore: new Map() // Add cookie store for session persistence
+    cookieStore: new Map()
   });
 };
 
 exports.connectInstagram = async (req, res) => {
   try {
+    console.log('Instagram connect request received');
     const { instagramUsername, instagramPassword } = req.body;
     
     if (!instagramUsername || !instagramPassword) {
+      console.log('Missing credentials');
       return res.status(400).json({
         success: false,
         message: 'Please provide Instagram username and password'
       });
     }
 
+    console.log('Creating Instagram client...');
     const client = getInstagramClient(instagramUsername, instagramPassword);
     
     try {
+      console.log('Attempting to login to Instagram...');
       // Attempt to login to verify credentials
       await client.login();
+      console.log('Instagram login successful');
       
       // Get user info to verify account
+      console.log('Fetching Instagram profile...');
       const profile = await client.getProfile();
+      console.log('Instagram profile fetched successfully');
       
       // Save Instagram info to user
+      console.log('Updating user record...');
       const user = await User.findByIdAndUpdate(
         req.user.id,
         {
@@ -42,6 +50,7 @@ exports.connectInstagram = async (req, res) => {
         },
         { new: true }
       );
+      console.log('User record updated successfully');
 
       res.status(200).json({
         success: true,
@@ -52,12 +61,15 @@ exports.connectInstagram = async (req, res) => {
         }
       });
     } catch (error) {
+      console.error('Instagram API Error:', error);
       return res.status(401).json({
         success: false,
-        message: 'Invalid Instagram credentials'
+        message: 'Invalid Instagram credentials or API error',
+        error: error.message
       });
     }
   } catch (error) {
+    console.error('Server Error:', error);
     res.status(500).json({
       success: false,
       message: 'Error connecting Instagram account',
@@ -68,6 +80,7 @@ exports.connectInstagram = async (req, res) => {
 
 exports.followUser = async (req, res) => {
   try {
+    console.log('Follow request received');
     const { targetUsername } = req.body;
     
     if (!req.user.isInstagramConnected) {
@@ -86,45 +99,63 @@ exports.followUser = async (req, res) => {
       });
     }
 
+    console.log('Creating Instagram client for follow operation...');
     const client = getInstagramClient(user.instagramUsername, user.instagramPassword);
     
-    // Login before performing any action
-    await client.login();
-    
-    // Get target user info
-    const targetUser = await client.getUserByUsername({ username: targetUsername });
-    
-    if (!targetUser) {
-      return res.status(404).json({
+    try {
+      // Login before performing any action
+      console.log('Logging in to Instagram...');
+      await client.login();
+      console.log('Instagram login successful');
+      
+      // Get target user info
+      console.log('Fetching target user info...');
+      const targetUser = await client.getUserByUsername({ username: targetUsername });
+      
+      if (!targetUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'Instagram user not found'
+        });
+      }
+
+      // Follow the user
+      console.log('Attempting to follow user...');
+      await client.follow({ userId: targetUser.id });
+      console.log('Successfully followed user on Instagram');
+
+      // Record the follow action
+      console.log('Recording follow action...');
+      const instagramFollow = await InstagramFollow.create({
+        user: req.user.id,
+        instagramUsername: targetUsername,
+        instagramId: targetUser.id
+      });
+
+      // Award points
+      console.log('Awarding points...');
+      await User.findByIdAndUpdate(
+        req.user.id,
+        {
+          $inc: { points: 1 }
+        }
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Successfully followed user and earned 1 point',
+        data: instagramFollow
+      });
+    } catch (error) {
+      console.error('Instagram API Error:', error);
+      return res.status(401).json({
         success: false,
-        message: 'Instagram user not found'
+        message: 'Error following user on Instagram',
+        error: error.message
       });
     }
-
-    // Follow the user
-    await client.follow({ userId: targetUser.id });
-
-    // Record the follow action
-    const instagramFollow = await InstagramFollow.create({
-      user: req.user.id,
-      instagramUsername: targetUsername,
-      instagramId: targetUser.id
-    });
-
-    // Award points
-    await User.findByIdAndUpdate(
-      req.user.id,
-      {
-        $inc: { points: 1 }
-      }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'Successfully followed user and earned 1 point',
-      data: instagramFollow
-    });
   } catch (error) {
+    console.error('Server Error:', error);
     res.status(500).json({
       success: false,
       message: 'Error following Instagram user',
@@ -135,6 +166,7 @@ exports.followUser = async (req, res) => {
 
 exports.getFollowHistory = async (req, res) => {
   try {
+    console.log('Fetching follow history...');
     const follows = await InstagramFollow.find({ user: req.user.id })
       .sort({ followDate: -1 });
 
@@ -143,6 +175,7 @@ exports.getFollowHistory = async (req, res) => {
       data: follows
     });
   } catch (error) {
+    console.error('Server Error:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching follow history',
