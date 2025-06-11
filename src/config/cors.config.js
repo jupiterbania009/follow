@@ -1,4 +1,4 @@
-cconst whitelist = [
+const whitelist = [
   'http://localhost:3000', // React development server
   'http://localhost:5000', // Express API server
   'https://instafollowx.onrender.com', // Production domain
