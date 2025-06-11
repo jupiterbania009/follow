@@ -57,20 +57,44 @@ if (config.REDIS_URL) {
 }
 
 // Session configuration
-const sessionConfig = session({
-  store: sessionStore, // Will fall back to MemoryStore if sessionStore is null
-  secret: config.SESSION_SECRET,
-  name: 'sessionId',
+const sessionConfig = {
+  store: sessionStore,
+  secret: config.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
+  name: 'sessionId',
   cookie: {
     secure: config.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 1000 * 60 * 60 * 24, // 24 hours
-    sameSite: 'strict'
-  },
-  rolling: true
-});
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax'
+  }
+};
+
+// Add session cleanup for Instagram checkpoint data
+if (sessionStore) {
+  // Cleanup expired checkpoint data every hour
+  setInterval(() => {
+    sessionStore.all((err, sessions) => {
+      if (err) {
+        console.error('Error cleaning up checkpoint sessions:', err);
+        return;
+      }
+
+      const now = new Date();
+      sessions.forEach((session) => {
+        if (session.instagramCheckpoint) {
+          const checkpointTime = new Date(session.instagramCheckpoint.timestamp);
+          // Remove checkpoint data after 15 minutes
+          if (now - checkpointTime > 15 * 60 * 1000) {
+            delete session.instagramCheckpoint;
+            sessionStore.set(session.id, session);
+          }
+        }
+      });
+    });
+  }, 60 * 60 * 1000); // Run every hour
+}
 
 module.exports = {
   sessionConfig,
