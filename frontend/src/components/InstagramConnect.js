@@ -10,6 +10,10 @@ import {
   Text,
   Icon,
   HStack,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
 } from '@chakra-ui/react';
 import { FaInstagram } from 'react-icons/fa';
 import axiosInstance from '../config/axios.config';
@@ -21,11 +25,13 @@ const InstagramConnect = ({ onSuccess, isConnected }) => {
     instagramPassword: '',
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const toast = useToast();
 
   const handleConnect = async (e) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
 
     try {
       const response = await axiosInstance.post('/instagram/connect', credentials);
@@ -47,9 +53,12 @@ const InstagramConnect = ({ onSuccess, isConnected }) => {
         });
       }
     } catch (error) {
+      console.error('Instagram connection error:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message;
+      setError(errorMessage);
       toast({
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to connect Instagram account',
+        description: errorMessage,
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -64,6 +73,8 @@ const InstagramConnect = ({ onSuccess, isConnected }) => {
       ...credentials,
       [e.target.name]: e.target.value,
     });
+    // Clear error when user starts typing
+    if (error) setError(null);
   };
 
   if (isConnected) {
@@ -88,6 +99,16 @@ const InstagramConnect = ({ onSuccess, isConnected }) => {
             Connect Instagram Account
           </Text>
         </HStack>
+
+        {error && (
+          <Alert status="error" borderRadius="md">
+            <AlertIcon />
+            <Box>
+              <AlertTitle>Connection Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Box>
+          </Alert>
+        )}
         
         <FormControl>
           <FormLabel>Instagram Username</FormLabel>
