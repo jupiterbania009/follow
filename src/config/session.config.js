@@ -36,6 +36,11 @@ if (config.REDIS_URL) {
 
     redisClient.on('error', (err) => {
       console.error('Redis session store error:', err);
+      // Don't crash the server on Redis errors
+      if (sessionStore) {
+        console.log('Falling back to memory store for sessions');
+        sessionStore = null;
+      }
     });
 
     redisClient.on('connect', () => {
@@ -56,19 +61,27 @@ if (config.REDIS_URL) {
   console.log('REDIS_URL not provided, using memory store for sessions');
 }
 
-// Session configuration
-const sessionConfig = {
-  store: sessionStore,
-  secret: config.SESSION_SECRET || 'your-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  name: 'sessionId',
-  cookie: {
-    secure: config.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax'
+// Create session middleware
+const createSessionMiddleware = () => {
+  const baseConfig = {
+    secret: config.SESSION_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    name: 'sessionId',
+    cookie: {
+      secure: config.NODE_ENV === 'production',
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: 'lax'
+    }
+  };
+
+  // Add store if Redis is available
+  if (sessionStore) {
+    baseConfig.store = sessionStore;
   }
+
+  return session(baseConfig);
 };
 
 // Add session cleanup for Instagram checkpoint data
@@ -96,7 +109,8 @@ if (sessionStore) {
   }, 60 * 60 * 1000); // Run every hour
 }
 
+// Export session middleware creator instead of config
 module.exports = {
-  sessionConfig,
+  createSessionMiddleware,
   redisClient
 }; 
