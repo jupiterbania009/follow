@@ -12,6 +12,6 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: REDIS_URL
-        value: redis://default:6hUrYZQkUF26SIgCkGkaKSDlsbWvZ5Nm@redis-17417.c301.ap-south-1-1.ec2.redns.redis-cloud.com:17417
+        value: rediss://default:6hUrYZQkUF26SIgCkGkaKSDlsbWvZ5Nm@redis-17417.c301.ap-south-1-1.ec2.redns.redis-cloud.com:17417
       - key: SESSION_SECRET
         generateValue: true 
