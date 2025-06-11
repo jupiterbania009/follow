@@ -77,6 +77,66 @@ async function setEssentialCookies(cookieJar) {
     }
 }
 
+// Create a memory store that implements the tough-cookie Store interface
+class MemoryStore {
+    constructor() {
+        this.idx = {};
+    }
+
+    findCookie(domain, path, key, cb) {
+        if (!this.idx[domain] || !this.idx[domain][path] || !this.idx[domain][path][key]) {
+            cb(null, null);
+            return;
+        }
+        cb(null, this.idx[domain][path][key]);
+    }
+
+    putCookie(cookie, cb) {
+        if (!this.idx[cookie.domain]) {
+            this.idx[cookie.domain] = {};
+        }
+        if (!this.idx[cookie.domain][cookie.path]) {
+            this.idx[cookie.domain][cookie.path] = {};
+        }
+        this.idx[cookie.domain][cookie.path][cookie.key] = cookie;
+        cb(null);
+    }
+
+    getAllCookies(cb) {
+        const cookies = [];
+        Object.keys(this.idx).forEach(domain => {
+            Object.keys(this.idx[domain]).forEach(path => {
+                Object.keys(this.idx[domain][path]).forEach(key => {
+                    cookies.push(this.idx[domain][path][key]);
+                });
+            });
+        });
+        cb(null, cookies);
+    }
+
+    removeCookie(domain, path, key, cb) {
+        if (this.idx[domain] && this.idx[domain][path] && this.idx[domain][path][key]) {
+            delete this.idx[domain][path][key];
+        }
+        cb(null);
+    }
+
+    removeCookies(domain, path, cb) {
+        if (this.idx[domain]) {
+            if (path) {
+                delete this.idx[domain][path];
+            } else {
+                delete this.idx[domain];
+            }
+        }
+        cb(null);
+    }
+
+    updateCookie(oldCookie, newCookie, cb) {
+        this.putCookie(newCookie, cb);
+    }
+}
+
 const createCookieStore = (username) => {
     try {
         const cookieFile = path.join(cookiesDir, `${username}.json`);
@@ -86,8 +146,8 @@ const createCookieStore = (username) => {
             fs.writeFileSync(cookieFile, '{}');
         }
 
-        // Create a new cookie jar with file store
-        const cookieJar = new CookieJar(new FileCookieStore(cookieFile));
+        // Create a new cookie jar with memory store
+        const cookieJar = new CookieJar(new MemoryStore());
         
         // Set essential cookies
         setEssentialCookies(cookieJar)
@@ -96,8 +156,8 @@ const createCookieStore = (username) => {
         return cookieJar;
     } catch (error) {
         console.error('Error creating cookie store:', error);
-        // Fallback to memory-only cookie jar if file store fails
-        const cookieJar = new CookieJar();
+        // Fallback to memory-only cookie jar
+        const cookieJar = new CookieJar(new MemoryStore());
         
         // Set essential cookies even in memory-only mode
         setEssentialCookies(cookieJar)
