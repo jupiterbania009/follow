@@ -71,6 +71,13 @@ const InstagramConnect = ({ onSuccess, isConnected }) => {
       if (error.response?.data?.error === 'checkpoint_required') {
         setCheckpointData(error.response.data.checkpoint);
         onOpen(); // Open verification modal
+        toast({
+          title: 'Security Check Required',
+          description: error.response.data.message,
+          status: 'info',
+          duration: 5000,
+          isClosable: true,
+        });
       } else {
         setError(errorMessage);
         toast({
@@ -107,7 +114,7 @@ const InstagramConnect = ({ onSuccess, isConnected }) => {
         });
         if (onSuccess) onSuccess(response.data);
         
-        // Clear the verification code
+        // Clear the verification code and checkpoint data
         setVerificationCode('');
         setCheckpointData(null);
       }
@@ -209,10 +216,17 @@ const InstagramConnect = ({ onSuccess, isConnected }) => {
                 <Box>
                   <AlertTitle>Security Check</AlertTitle>
                   <AlertDescription>
-                    Please enter the verification code sent to your {checkpointData?.type === 'email' ? 'email' : 'phone'}.
+                    Please enter the verification code sent to your {checkpointData?.type === 'email' ? 'email' : 'phone'} ({checkpointData?.contactPoint}).
                   </AlertDescription>
                 </Box>
               </Alert>
+
+              {error && (
+                <Alert status="error">
+                  <AlertIcon />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
               <form onSubmit={handleVerificationSubmit} style={{ width: '100%' }}>
                 <VStack spacing={4}>
