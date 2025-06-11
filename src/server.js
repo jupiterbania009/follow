@@ -24,25 +24,29 @@ const { loginLimiter, registrationLimiter, apiLimiter } = require('./middleware/
 
 const app = express();
 
+// Enable CORS with options
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
+
 // Basic middleware
 app.use(express.json({
   limit: '10kb' // Limit body size
 }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
-app.use(compression()); // Compress all routes
+app.use(compression());
 app.use(morgan('dev'));
+app.use(mongoSanitize());
+app.use(hpp());
 
 // Security middleware
 app.use(helmetConfig);
-app.use(cors(corsOptions));
-app.use(corsErrorHandler);
 app.use(additionalHeaders);
 app.use(securityResponseHeaders);
-app.use(mongoSanitize); // Prevent NoSQL injection
-app.use(hpp()); // Prevent HTTP Parameter Pollution
 app.use(sanitizeRequest);
 app.use(sanitizeResponse);
+
+// Session configuration
 app.use(sessionConfig);
 
 // Apply rate limiting to specific routes
@@ -62,17 +66,14 @@ app.use('/api', (req, res, next) => {
     next();
 });
 
-// Routes
+// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/follow', followRoutes);
+app.use('/api/follows', followRoutes);
 app.use('/api/reviews', reviewRoutes);
 
-// CSP violation report endpoint
-app.post('/api/csp-report', (req, res) => {
-    console.error('CSP Violation:', req.body);
-    res.status(204).end();
-});
+// Error handler for CORS
+app.use(corsErrorHandler);
 
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {
@@ -80,7 +81,7 @@ if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, '../frontend/build')));
 
     // Handle React routing, return all requests to React app
-    app.get('*', (req, res) => {
+    app.get('*', (req, res, next) => {
         if (!req.path.startsWith('/api')) {
             res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
         } else {
@@ -114,14 +115,6 @@ app.use((err, req, res, next) => {
         success: false,
         message: err.message || 'Internal server error',
         error: process.env.NODE_ENV === 'development' ? err : undefined
-    });
-});
-
-// 404 handler
-app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        message: 'Route not found'
     });
 });
 
