@@ -6,6 +6,7 @@ const morgan = require('morgan');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const hpp = require('hpp');
+const path = require('path');
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
@@ -73,6 +74,21 @@ app.post('/api/csp-report', (req, res) => {
     res.status(204).end();
 });
 
+// Serve static files from the React app in production
+if (process.env.NODE_ENV === 'production') {
+    // Serve static files
+    app.use(express.static(path.join(__dirname, '../frontend/build')));
+
+    // Handle React routing, return all requests to React app
+    app.get('*', (req, res) => {
+        if (!req.path.startsWith('/api')) {
+            res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+        } else {
+            next();
+        }
+    });
+}
+
 // Global error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
@@ -112,8 +128,6 @@ app.use((req, res) => {
 // Database connection with retry logic
 const connectWithRetry = () => {
     mongoose.connect(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
     })
