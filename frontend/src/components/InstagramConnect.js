@@ -12,7 +12,8 @@ import {
   HStack,
 } from '@chakra-ui/react';
 import { FaInstagram } from 'react-icons/fa';
-import axios from 'axios';
+import axiosInstance from '../config/axios.config';
+import useAuthStore from '../store/authStore';
 
 const InstagramConnect = ({ onSuccess, isConnected }) => {
   const [credentials, setCredentials] = useState({
@@ -27,7 +28,7 @@ const InstagramConnect = ({ onSuccess, isConnected }) => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('/api/instagram/connect', credentials);
+      const response = await axiosInstance.post('/instagram/connect', credentials);
       
       if (response.data.success) {
         toast({
@@ -38,6 +39,12 @@ const InstagramConnect = ({ onSuccess, isConnected }) => {
           isClosable: true,
         });
         if (onSuccess) onSuccess(response.data);
+        
+        // Clear the form
+        setCredentials({
+          instagramUsername: '',
+          instagramPassword: '',
+        });
       }
     } catch (error) {
       toast({
