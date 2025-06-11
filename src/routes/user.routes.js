@@ -3,9 +3,16 @@ const router = express.Router();
 const { authenticateToken } = require('../middleware/auth.middleware');
 
 // User profile routes
-router.get('/profile', authenticateToken, async (req, res) => {
+router.get('/profile', authenticateToken, (req, res) => {
     try {
-        const user = await req.user;
+        const user = req.user;
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
         res.json({
             success: true,
             data: {
@@ -13,8 +20,8 @@ router.get('/profile', authenticateToken, async (req, res) => {
                 username: user.username,
                 email: user.email,
                 points: user.points,
-                followersCount: user.followers.length,
-                followingCount: user.following.length
+                followersCount: user.followers ? user.followers.length : 0,
+                followingCount: user.following ? user.following.length : 0
             }
         });
     } catch (error) {
@@ -25,12 +32,19 @@ router.get('/profile', authenticateToken, async (req, res) => {
 // Update user profile
 router.put('/profile', authenticateToken, async (req, res) => {
     try {
+        const user = req.user;
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
         const updates = {};
         ['username', 'email'].forEach(field => {
             if (req.body[field]) updates[field] = req.body[field];
         });
 
-        const user = await req.user;
         Object.assign(user, updates);
         await user.save();
 
