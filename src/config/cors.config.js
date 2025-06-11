@@ -1,6 +1,8 @@
-const whitelist = [
+cconst whitelist = [
   'http://localhost:3000', // React development server
   'http://localhost:5000', // Express API server
+  'https://instafollowx.onrender.com', // Production domain
+  undefined, // Allow requests with no origin (like mobile apps or Postman)
   // Add your production domains here, for example:
   // 'https://your-production-domain.com',
   // 'https://api.your-production-domain.com'
@@ -9,13 +11,10 @@ const whitelist = [
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, curl requests)
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    if (whitelist.indexOf(origin) !== -1) {
+    if (!origin || whitelist.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      console.log('Blocked by CORS:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
