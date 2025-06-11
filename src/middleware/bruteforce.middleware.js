@@ -9,13 +9,23 @@ if (process.env.REDIS_URL) {
     redisClient = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 3,
       enableOfflineQueue: false,
-      connectTimeout: 5000,
+      connectTimeout: 10000,
       retryStrategy(times) {
         if (times > 3) {
           console.log('Redis connection failed, falling back to memory store');
           return null;
         }
         return Math.min(times * 1000, 3000);
+      },
+      tls: {
+        rejectUnauthorized: true
+      },
+      reconnectOnError: function(err) {
+        const targetError = 'READONLY';
+        if (err.message.includes(targetError)) {
+          return true;
+        }
+        return false;
       }
     });
 
@@ -24,7 +34,7 @@ if (process.env.REDIS_URL) {
     });
 
     redisClient.on('connect', () => {
-      console.log('Successfully connected to Redis');
+      console.log('Successfully connected to Redis Cloud for rate limiting');
     });
   } catch (error) {
     console.error('Error initializing Redis:', error);
