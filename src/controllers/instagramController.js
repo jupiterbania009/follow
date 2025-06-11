@@ -4,8 +4,8 @@ const User = require('../models/user.model');
 const { createCookieStore } = require('../utils/cookieStore');
 
 // Instagram client configuration
-const getInstagramClient = async (username, password) => {
-  const cookieStore = await createCookieStore(username);
+const getInstagramClient = (username, password) => {
+  const cookieStore = createCookieStore(username);
   return new InstagramAPI({
     username,
     password,
@@ -13,69 +13,47 @@ const getInstagramClient = async (username, password) => {
   });
 };
 
+// Connect Instagram account
 exports.connectInstagram = async (req, res) => {
   try {
     console.log('Instagram connect request received');
     const { instagramUsername, instagramPassword } = req.body;
-    
+
     if (!instagramUsername || !instagramPassword) {
-      console.log('Missing credentials');
       return res.status(400).json({
         success: false,
-        message: 'Please provide Instagram username and password'
+        message: 'Please provide both Instagram username and password'
       });
     }
 
     console.log('Creating Instagram client...');
-    const client = await getInstagramClient(instagramUsername, instagramPassword);
-    
-    try {
-      console.log('Attempting to login to Instagram...');
-      // Attempt to login to verify credentials
-      await client.login();
-      console.log('Instagram login successful');
-      
-      // Get user info to verify account
-      console.log('Fetching Instagram profile...');
-      const profile = await client.getProfile();
-      console.log('Instagram profile fetched successfully');
-      
-      // Save Instagram info to user
-      console.log('Updating user record...');
-      const user = await User.findByIdAndUpdate(
-        req.user.id,
-        {
-          instagramUsername,
-          instagramPassword: instagramPassword,
-          instagramId: profile.id,
-          isInstagramConnected: true
-        },
-        { new: true }
-      );
-      console.log('User record updated successfully');
+    const client = getInstagramClient(instagramUsername, instagramPassword);
 
-      res.status(200).json({
-        success: true,
-        message: 'Instagram account connected successfully',
-        data: {
-          instagramUsername: user.instagramUsername,
-          isInstagramConnected: user.isInstagramConnected
-        }
-      });
-    } catch (error) {
-      console.error('Instagram API Error:', error);
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid Instagram credentials or API error',
-        error: error.message || 'Unknown Instagram API error'
-      });
-    }
+    // Test the connection by trying to login
+    console.log('Attempting to login to Instagram...');
+    await client.login();
+
+    // If login successful, update user's Instagram credentials
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        instagramUsername,
+        instagramConnected: true
+      },
+      { new: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Instagram account connected successfully',
+      user
+    });
   } catch (error) {
-    console.error('Server Error:', error);
+    console.error('Instagram connection error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error connecting Instagram account',
-      error: error.message || 'Unknown server error'
+      message: 'Failed to connect Instagram account',
+      error: error.message
     });
   }
 };
