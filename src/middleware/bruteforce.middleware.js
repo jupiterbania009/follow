@@ -6,7 +6,15 @@ let redisClient = null;
 // Initialize Redis if configuration is available
 if (process.env.REDIS_URL) {
   try {
-    redisClient = new Redis(process.env.REDIS_URL, {
+    // Parse the Redis URL to get the host
+    const redisUrl = new URL(process.env.REDIS_URL);
+    
+    redisClient = new Redis({
+      host: redisUrl.hostname,
+      port: parseInt(redisUrl.port),
+      username: redisUrl.username,
+      password: redisUrl.password,
+      db: 0,
       maxRetriesPerRequest: 3,
       enableOfflineQueue: false,
       connectTimeout: 10000,
@@ -17,16 +25,10 @@ if (process.env.REDIS_URL) {
         }
         return Math.min(times * 1000, 3000);
       },
-      tls: {
-        rejectUnauthorized: true
-      },
-      reconnectOnError: function(err) {
-        const targetError = 'READONLY';
-        if (err.message.includes(targetError)) {
-          return true;
-        }
-        return false;
-      }
+      tls: process.env.REDIS_URL.startsWith('rediss://') ? {
+        rejectUnauthorized: false, // Temporarily disable certificate verification
+        minVersion: 'TLSv1.2'
+      } : undefined
     });
 
     redisClient.on('error', (err) => {
