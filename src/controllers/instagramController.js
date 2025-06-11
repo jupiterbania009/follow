@@ -1,13 +1,15 @@
 const InstagramAPI = require('instagram-web-api');
 const InstagramFollow = require('../models/InstagramFollow');
 const User = require('../models/user.model');
+const { createCookieStore } = require('../utils/cookieStore');
 
 // Instagram client configuration
 const getInstagramClient = (username, password) => {
+  const cookieStore = createCookieStore(username);
   return new InstagramAPI({
     username,
     password,
-    cookieStore: new Map()
+    cookieStore
   });
 };
 
@@ -44,7 +46,7 @@ exports.connectInstagram = async (req, res) => {
         req.user.id,
         {
           instagramUsername,
-          instagramPassword: instagramPassword, // Store password for future operations
+          instagramPassword: instagramPassword,
           instagramId: profile.id,
           isInstagramConnected: true
         },
@@ -65,7 +67,7 @@ exports.connectInstagram = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: 'Invalid Instagram credentials or API error',
-        error: error.message
+        error: error.message || 'Unknown Instagram API error'
       });
     }
   } catch (error) {
@@ -73,7 +75,7 @@ exports.connectInstagram = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error connecting Instagram account',
-      error: error.message
+      error: error.message || 'Unknown server error'
     });
   }
 };
@@ -151,7 +153,7 @@ exports.followUser = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: 'Error following user on Instagram',
-        error: error.message
+        error: error.message || 'Unknown Instagram API error'
       });
     }
   } catch (error) {
@@ -159,7 +161,7 @@ exports.followUser = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error following Instagram user',
-      error: error.message
+      error: error.message || 'Unknown server error'
     });
   }
 };
@@ -179,7 +181,7 @@ exports.getFollowHistory = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching follow history',
-      error: error.message
+      error: error.message || 'Unknown server error'
     });
   }
 }; 
