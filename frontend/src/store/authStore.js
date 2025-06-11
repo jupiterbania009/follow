@@ -1,6 +1,6 @@
 import create from 'zustand';
 import axios from 'axios';
-import API_URL from '../config/api.config';git init
+import API_URL from '../config/api.config';
 
 const useAuthStore = create((set) => ({
   user: null,
