@@ -17,9 +17,11 @@ import {
   SimpleGrid,
   Card,
   CardBody,
+  Divider,
 } from '@chakra-ui/react';
 import useAuthStore from '../store/authStore';
 import useFollowStore from '../store/followStore';
+import InstagramConnect from '../components/InstagramConnect';
 
 const UserCard = ({ user, onFollow }) => (
   <Card>
@@ -41,7 +43,7 @@ const UserCard = ({ user, onFollow }) => (
 );
 
 const Dashboard = () => {
-  const { user } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
   const {
     suggestions,
     followers,
@@ -75,6 +77,15 @@ const Dashboard = () => {
     }
   };
 
+  const handleInstagramSuccess = (data) => {
+    // Update user data in store with new Instagram connection status
+    updateUser({
+      ...user,
+      isInstagramConnected: true,
+      instagramUsername: data.data.instagramUsername
+    });
+  };
+
   return (
     <Grid templateColumns={{ base: '1fr', md: 'repeat(3, 1fr)' }} gap={8}>
       {/* User Stats */}
@@ -97,6 +108,18 @@ const Dashboard = () => {
             </StatGroup>
           </CardBody>
         </Card>
+      </GridItem>
+
+      {/* Instagram Connection */}
+      <GridItem colSpan={{ base: 1, md: 3 }}>
+        <InstagramConnect 
+          isConnected={user?.isInstagramConnected}
+          onSuccess={handleInstagramSuccess}
+        />
+      </GridItem>
+
+      <GridItem colSpan={{ base: 1, md: 3 }}>
+        <Divider />
       </GridItem>
 
       {/* Follow Suggestions */}
