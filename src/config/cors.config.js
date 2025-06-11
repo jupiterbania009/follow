@@ -2,6 +2,7 @@ const whitelist = [
   'http://localhost:3000', // React development server
   'http://localhost:5000', // Express API server
   'https://instafollowx.onrender.com', // Production domain
+  'https://int-flow.onrender.com', // Your actual production domain
   undefined // Allow requests with no origin (like mobile apps or Postman)
 ];
 
