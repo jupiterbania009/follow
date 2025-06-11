@@ -39,6 +39,32 @@ const getInstagramClient = (username, password) => {
   }
 };
 
+// Handle checkpoint challenge
+const handleCheckpoint = async (client, challengeUrl) => {
+  try {
+    // Request the challenge page
+    const challengeResponse = await client.request({
+      method: 'GET',
+      url: challengeUrl,
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      }
+    });
+
+    // Extract challenge details
+    return {
+      challengeType: challengeResponse.step_name,
+      challengeData: challengeResponse,
+      verificationMethods: challengeResponse.step_data,
+      checkpointUrl: challengeUrl
+    };
+  } catch (error) {
+    console.error('Error handling checkpoint:', error);
+    throw error;
+  }
+};
+
 // Connect Instagram account
 exports.connectInstagram = async (req, res) => {
   try {
@@ -86,13 +112,36 @@ exports.connectInstagram = async (req, res) => {
     } catch (loginError) {
       console.error('Instagram login error:', loginError);
       
-      // Check for specific error types
+      // Handle checkpoint challenge
       if (loginError.message.includes('checkpoint_required')) {
-        return res.status(403).json({
-          success: false,
-          message: 'Instagram security checkpoint required. Please log in to Instagram directly and complete the verification.',
-          error: 'checkpoint_required'
-        });
+        try {
+          const challengeInfo = await handleCheckpoint(client, loginError.checkpoint_url);
+          
+          // Store checkpoint information in user session for later use
+          req.session.instagramCheckpoint = {
+            username: instagramUsername,
+            challengeUrl: challengeInfo.checkpointUrl,
+            timestamp: new Date()
+          };
+
+          return res.status(403).json({
+            success: false,
+            message: 'Instagram security checkpoint required',
+            error: 'checkpoint_required',
+            checkpoint: {
+              type: challengeInfo.challengeType,
+              methods: challengeInfo.verificationMethods,
+              url: challengeInfo.checkpointUrl
+            }
+          });
+        } catch (checkpointError) {
+          console.error('Checkpoint handling error:', checkpointError);
+          return res.status(403).json({
+            success: false,
+            message: 'Unable to process Instagram security checkpoint',
+            error: 'checkpoint_error'
+          });
+        }
       }
       
       if (loginError.message.includes('bad_password')) {
@@ -114,6 +163,81 @@ exports.connectInstagram = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to connect Instagram account',
+      error: error.message
+    });
+  }
+};
+
+// Submit checkpoint verification code
+exports.submitVerificationCode = async (req, res) => {
+  try {
+    const { code } = req.body;
+    
+    // Get checkpoint info from session
+    const checkpointInfo = req.session.instagramCheckpoint;
+    if (!checkpointInfo) {
+      return res.status(400).json({
+        success: false,
+        message: 'No active checkpoint challenge found'
+      });
+    }
+
+    const client = getInstagramClient(checkpointInfo.username);
+
+    // Submit the verification code
+    try {
+      const verifyResponse = await client.request({
+        method: 'POST',
+        url: checkpointInfo.challengeUrl,
+        form: {
+          security_code: code,
+          csrftoken: client.state.cookieJar.getCookies('csrftoken')
+        }
+      });
+
+      if (verifyResponse.status === 'ok') {
+        // Clear checkpoint info from session
+        delete req.session.instagramCheckpoint;
+
+        // Try logging in again
+        await client.login();
+
+        // Update user's Instagram connection status
+        const user = await User.findByIdAndUpdate(
+          req.user._id,
+          {
+            instagramUsername: checkpointInfo.username,
+            instagramConnected: true,
+            lastInstagramLogin: new Date()
+          },
+          { new: true }
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: 'Verification successful',
+          user
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid verification code',
+          error: 'invalid_code'
+        });
+      }
+    } catch (verifyError) {
+      console.error('Verification error:', verifyError);
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to verify code',
+        error: verifyError.message
+      });
+    }
+  } catch (error) {
+    console.error('Verification submission error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit verification code',
       error: error.message
     });
   }
