@@ -23,6 +23,7 @@ const corsErrorHandler = require('./middleware/cors.middleware');
 const { helmetConfig, additionalHeaders, securityResponseHeaders } = require('./middleware/security.middleware');
 const { sanitizeRequest, sanitizeResponse } = require('./middleware/sanitize.middleware');
 const { loginLimiter, registrationLimiter, apiLimiter } = require('./middleware/bruteforce.middleware');
+const config = require('./config/config');
 
 const app = express();
 
@@ -127,12 +128,12 @@ app.use((err, req, res, next) => {
 // Database connection with retry logic
 const connectWithRetry = () => {
     // Validate MongoDB URI
-    if (!process.env.MONGODB_URI) {
+    if (!config.MONGODB_URI) {
         console.error('MONGODB_URI environment variable is not set');
         process.exit(1);
     }
 
-    mongoose.connect(process.env.MONGODB_URI, {
+    mongoose.connect(config.MONGODB_URI, {
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
         maxPoolSize: 10,
