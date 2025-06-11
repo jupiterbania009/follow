@@ -1,20 +1,40 @@
 const rateLimit = require('express-rate-limit');
 const Redis = require('ioredis');
 
-// Create Redis client
-const redisClient = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
-  password: process.env.REDIS_PASSWORD,
-  enableOfflineQueue: false
-});
+let redisClient = null;
 
-// Handle Redis connection errors
-redisClient.on('error', (err) => {
-  console.error('Redis error:', err);
-});
+// Initialize Redis if configuration is available
+if (process.env.REDIS_URL) {
+  try {
+    redisClient = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      enableOfflineQueue: false,
+      connectTimeout: 5000,
+      retryStrategy(times) {
+        if (times > 3) {
+          console.log('Redis connection failed, falling back to memory store');
+          return null;
+        }
+        return Math.min(times * 1000, 3000);
+      }
+    });
 
-// Create a simple memory store as fallback
+    redisClient.on('error', (err) => {
+      console.error('Redis error:', err);
+    });
+
+    redisClient.on('connect', () => {
+      console.log('Successfully connected to Redis');
+    });
+  } catch (error) {
+    console.error('Error initializing Redis:', error);
+    redisClient = null;
+  }
+} else {
+  console.log('REDIS_URL not provided, using memory store for rate limiting');
+}
+
+// Create a rate limiter with fallback to memory store
 const createRateLimiter = (windowMs, max, message) => {
   return rateLimit({
     windowMs,
@@ -62,4 +82,8 @@ const bruteForceMiddleware = {
   )
 };
 
-module.exports = bruteForceMiddleware; 
+// Export Redis client for use in other parts of the application
+module.exports = {
+  ...bruteForceMiddleware,
+  redisClient
+}; 
