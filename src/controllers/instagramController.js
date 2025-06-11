@@ -46,21 +46,53 @@ const extractChallengeInfo = (checkpointUrl) => {
       throw new Error('No checkpoint URL provided');
     }
 
-    // Extract challenge ID from the URL
-    const challengeMatch = checkpointUrl.match(/challenge\/([^/]+)\//);
-    const challengeId = challengeMatch ? challengeMatch[1] : null;
+    console.log('Extracting challenge info from URL:', checkpointUrl);
+
+    // Try different regex patterns for challenge ID
+    let challengeId = null;
+    const challengePatterns = [
+      /challenge\/([^/]+)\//,  // Standard format
+      /challenge%2F([^%]+)%2F/, // URL encoded format
+      /challenge=([^&]+)/ // Query parameter format
+    ];
+
+    for (const pattern of challengePatterns) {
+      const match = checkpointUrl.match(pattern);
+      if (match) {
+        challengeId = match[1];
+        break;
+      }
+    }
 
     if (!challengeId) {
-      throw new Error('Could not extract challenge ID from URL');
+      throw new Error('Could not extract challenge ID from URL: ' + checkpointUrl);
     }
 
-    // Extract challenge context from the URL
-    const contextMatch = checkpointUrl.match(/challenge_context=([^&]+)/);
-    const challengeContext = contextMatch ? decodeURIComponent(contextMatch[1]) : null;
+    console.log('Extracted challenge ID:', challengeId);
 
+    // Try different regex patterns for challenge context
+    let challengeContext = null;
+    const contextPatterns = [
+      /challenge_context=([^&]+)/,  // Standard format
+      /challenge_context%3D([^%]+)/, // URL encoded format
+      /"challenge_context":"([^"]+)"/ // JSON format
+    ];
+
+    for (const pattern of contextPatterns) {
+      const match = checkpointUrl.match(pattern);
+      if (match) {
+        challengeContext = decodeURIComponent(match[1]);
+        break;
+      }
+    }
+
+    // If no challenge context found in URL, use a default one
     if (!challengeContext) {
-      throw new Error('Could not extract challenge context from URL');
+      console.log('No challenge context found in URL, using default');
+      challengeContext = 'CHALLENGE_CONTEXT';
     }
+
+    console.log('Extracted challenge context:', challengeContext);
 
     return {
       challengeId,
@@ -209,13 +241,15 @@ exports.connectInstagram = async (req, res) => {
       });
     } catch (loginError) {
       console.error('Instagram login error:', loginError);
-      console.log('Login error response structure:', {
+      
+      // Log the full error response for debugging
+      console.log('Login error details:', {
         error: loginError.error,
         body: loginError.body,
         message: loginError.message,
         response: loginError.response,
-        checkpoint_url: loginError.checkpoint_url,
-        raw: loginError
+        status: loginError.status,
+        data: loginError.data
       });
       
       // Handle checkpoint challenge
@@ -223,20 +257,48 @@ exports.connectInstagram = async (req, res) => {
         try {
           // Extract checkpoint URL from error response
           let checkpointUrl;
-          if (loginError.error && loginError.error.checkpoint_url) {
-            checkpointUrl = loginError.error.checkpoint_url;
-          } else if (loginError.body && loginError.body.checkpoint_url) {
-            checkpointUrl = loginError.body.checkpoint_url;
-          } else if (loginError.checkpoint_url) {
-            checkpointUrl = loginError.checkpoint_url;
-          } else if (loginError.response && loginError.response.body && loginError.response.body.checkpoint_url) {
-            checkpointUrl = loginError.response.body.checkpoint_url;
-          } else {
+          let checkpointData;
+          
+          // Try to parse the error message if it's JSON
+          try {
+            const errorData = JSON.parse(loginError.message.split(' - ')[1]);
+            checkpointUrl = errorData.checkpoint_url;
+            checkpointData = errorData;
+          } catch (e) {
+            console.log('Error parsing JSON from error message:', e);
+          }
+          
+          // If not found in error message, try other locations
+          if (!checkpointUrl) {
+            if (loginError.error && loginError.error.checkpoint_url) {
+              checkpointUrl = loginError.error.checkpoint_url;
+              checkpointData = loginError.error;
+            } else if (loginError.body && loginError.body.checkpoint_url) {
+              checkpointUrl = loginError.body.checkpoint_url;
+              checkpointData = loginError.body;
+            } else if (loginError.checkpoint_url) {
+              checkpointUrl = loginError.checkpoint_url;
+              checkpointData = loginError;
+            } else if (loginError.response && loginError.response.body) {
+              try {
+                const responseBody = typeof loginError.response.body === 'string' 
+                  ? JSON.parse(loginError.response.body) 
+                  : loginError.response.body;
+                checkpointUrl = responseBody.checkpoint_url;
+                checkpointData = responseBody;
+              } catch (e) {
+                console.log('Error parsing response body:', e);
+              }
+            }
+          }
+
+          if (!checkpointUrl) {
             console.error('No checkpoint URL found in error response:', loginError);
-            throw new Error('Checkpoint URL not found in response');
+            throw new Error('Could not find checkpoint URL in the response');
           }
 
           console.log('Extracted checkpoint URL:', checkpointUrl);
+          console.log('Checkpoint data:', checkpointData);
           
           const challengeInfo = await handleCheckpoint(client, checkpointUrl);
           
@@ -265,7 +327,7 @@ exports.connectInstagram = async (req, res) => {
           console.error('Checkpoint handling error:', checkpointError);
           return res.status(403).json({
             success: false,
-            message: 'Unable to send verification code. Please try again or log in to Instagram app directly.',
+            message: 'Unable to process Instagram security check. Please try again or log in to Instagram app directly.',
             error: 'checkpoint_error',
             details: checkpointError.message
           });
