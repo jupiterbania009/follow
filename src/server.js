@@ -18,7 +18,7 @@ const instagramRoutes = require('./routes/instagramRoutes');
 
 // Import configurations and middleware
 const corsOptions = require('./config/cors.config');
-const { sessionConfig } = require('./config/session.config');
+const { createSessionMiddleware } = require('./config/session.config');
 const corsErrorHandler = require('./middleware/cors.middleware');
 const { helmetConfig, additionalHeaders, securityResponseHeaders } = require('./middleware/security.middleware');
 const { sanitizeRequest, sanitizeResponse } = require('./middleware/sanitize.middleware');
@@ -33,46 +33,31 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
+app.use(compression());
 
 // Enable CORS with options
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
+app.options('*', cors(corsOptions));
 
 // Security middleware
 app.use(helmetConfig);
-app.use(compression());
 app.use(morgan('dev'));
 
 // Request sanitization (after body parsing)
-app.use(mongoSanitize()); // Sanitize requests against NoSQL injection
+app.use(mongoSanitize());
 app.use(hpp());
 app.use(sanitizeRequest);
 app.use(sanitizeResponse);
 
-app.use(additionalHeaders);
-app.use(securityResponseHeaders);
+// Initialize session middleware
+app.use(createSessionMiddleware());
 
-// Session configuration
-app.use(sessionConfig);
-
-// Apply rate limiting to specific routes
+// Apply rate limiters
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registrationLimiter);
 app.use('/api', apiLimiter);
 
-// API Security Headers for specific routes
-app.use('/api', (req, res, next) => {
-    // Ensure API responses are not cached
-    res.set({
-        'Surrogate-Control': 'no-store',
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-    });
-    next();
-});
-
-// API routes
+// Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/follows', followRoutes);
@@ -99,7 +84,8 @@ if (process.env.NODE_ENV === 'production') {
 
 // Global error handling middleware
 app.use((err, req, res, next) => {
-    console.error(err.stack);
+    console.error('Error:', err.message);
+    console.error('Stack:', err.stack);
     
     // Handle specific types of errors
     if (err.name === 'ValidationError') {
@@ -124,6 +110,18 @@ app.use((err, req, res, next) => {
         error: process.env.NODE_ENV === 'development' ? err : undefined
     });
 });
+
+// Validate required environment variables
+const validateConfig = () => {
+    const requiredVars = ['JWT_SECRET', 'SESSION_SECRET'];
+    const missingVars = requiredVars.filter(varName => !config[varName]);
+    
+    if (missingVars.length > 0) {
+        console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
+        return false;
+    }
+    return true;
+};
 
 // Database connection with retry logic
 const connectWithRetry = () => {
@@ -171,6 +169,11 @@ mongoose.connection.on('connected', () => {
     console.log('MongoDB connected successfully');
 });
 
+// Validate configuration before starting
+if (!validateConfig()) {
+    process.exit(1);
+}
+
 // Initial connection attempt
 connectWithRetry();
 
@@ -198,5 +201,17 @@ const gracefulShutdown = () => {
     }, 30000);
 };
 
+// Handle process signals
 process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown); 
+process.on('SIGINT', gracefulShutdown);
+
+// Handle uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    gracefulShutdown();
+});
+
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err);
+    gracefulShutdown();
+}); 
