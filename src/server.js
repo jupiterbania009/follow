@@ -184,21 +184,28 @@ const server = app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-const gracefulShutdown = () => {
+const gracefulShutdown = async () => {
     console.log('Received shutdown signal. Starting graceful shutdown...');
-    server.close(() => {
-        console.log('HTTP server closed');
-        mongoose.connection.close(false, () => {
-            console.log('MongoDB connection closed');
-            process.exit(0);
+    
+    try {
+        // Close HTTP server
+        await new Promise((resolve, reject) => {
+            server.close((err) => {
+                if (err) reject(err);
+                else resolve();
+            });
         });
-    });
+        console.log('HTTP server closed');
 
-    // Force shutdown after 30 seconds
-    setTimeout(() => {
-        console.error('Could not close connections in time, forcefully shutting down');
+        // Close MongoDB connection
+        await mongoose.connection.close();
+        console.log('MongoDB connection closed');
+        
+        process.exit(0);
+    } catch (err) {
+        console.error('Error during shutdown:', err);
         process.exit(1);
-    }, 30000);
+    }
 };
 
 // Handle process signals
