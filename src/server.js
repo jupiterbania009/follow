@@ -7,6 +7,7 @@ const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const hpp = require('hpp');
 const path = require('path');
+const mongoSanitize = require('express-mongo-sanitize');
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
@@ -19,14 +20,10 @@ const corsOptions = require('./config/cors.config');
 const { sessionConfig } = require('./config/session.config');
 const corsErrorHandler = require('./middleware/cors.middleware');
 const { helmetConfig, additionalHeaders, securityResponseHeaders } = require('./middleware/security.middleware');
-const { sanitizeRequest, mongoSanitize, sanitizeResponse } = require('./middleware/sanitize.middleware');
+const { sanitizeRequest, sanitizeResponse } = require('./middleware/sanitize.middleware');
 const { loginLimiter, registrationLimiter, apiLimiter } = require('./middleware/bruteforce.middleware');
 
 const app = express();
-
-// Enable CORS with options
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
 
 // Basic middleware
 app.use(express.json({
@@ -34,17 +31,24 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
-app.use(compression());
-app.use(morgan('dev'));
-app.use(mongoSanitize());
-app.use(hpp());
+
+// Enable CORS with options
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
 
 // Security middleware
 app.use(helmetConfig);
-app.use(additionalHeaders);
-app.use(securityResponseHeaders);
+app.use(compression());
+app.use(morgan('dev'));
+
+// Request sanitization (after body parsing)
+app.use(mongoSanitize()); // Sanitize requests against NoSQL injection
+app.use(hpp());
 app.use(sanitizeRequest);
 app.use(sanitizeResponse);
+
+app.use(additionalHeaders);
+app.use(securityResponseHeaders);
 
 // Session configuration
 app.use(sessionConfig);
