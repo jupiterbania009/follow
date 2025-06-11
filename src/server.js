@@ -127,15 +127,28 @@ app.use((req, res) => {
 
 // Database connection with retry logic
 const connectWithRetry = () => {
+    // Validate MongoDB URI
+    if (!process.env.MONGODB_URI) {
+        console.error('MONGODB_URI environment variable is not set');
+        process.exit(1);
+    }
+
     mongoose.connect(process.env.MONGODB_URI, {
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
+        maxPoolSize: 10,
+        minPoolSize: 5,
+        maxIdleTimeMS: 30000,
     })
     .then(() => {
-        console.log('Connected to MongoDB');
+        console.log('Connected to MongoDB successfully');
     })
     .catch(err => {
         console.error('MongoDB connection error:', err);
+        if (err.name === 'MongoParseError') {
+            console.error('Invalid MongoDB connection string. Please check your MONGODB_URI environment variable.');
+            process.exit(1);
+        }
         console.log('Retrying connection in 5 seconds...');
         setTimeout(connectWithRetry, 5000);
     });
@@ -144,6 +157,9 @@ const connectWithRetry = () => {
 // Handle MongoDB connection errors
 mongoose.connection.on('error', (err) => {
     console.error('MongoDB connection error:', err);
+    if (mongoose.connection.readyState !== 1) {
+        connectWithRetry();
+    }
 });
 
 mongoose.connection.on('disconnected', () => {
@@ -151,6 +167,11 @@ mongoose.connection.on('disconnected', () => {
     connectWithRetry();
 });
 
+mongoose.connection.on('connected', () => {
+    console.log('MongoDB connected successfully');
+});
+
+// Initial connection attempt
 connectWithRetry();
 
 // Start server
