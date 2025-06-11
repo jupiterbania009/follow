@@ -2,15 +2,11 @@ const whitelist = [
   'http://localhost:3000', // React development server
   'http://localhost:5000', // Express API server
   'https://instafollowx.onrender.com', // Production domain
-  undefined, // Allow requests with no origin (like mobile apps or Postman)
-  // Add your production domains here, for example:
-  // 'https://your-production-domain.com',
-  // 'https://api.your-production-domain.com'
+  undefined // Allow requests with no origin (like mobile apps or Postman)
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl requests)
     if (!origin || whitelist.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -24,11 +20,11 @@ const corsOptions = {
     'X-Requested-With',
     'Content-Type',
     'Accept',
-    'Authorization',
+    'Authorization'
   ],
-  credentials: true, // Allow cookies if you're using them
-  maxAge: 86400, // Cache preflight request results for 24 hours
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  credentials: true,
+  maxAge: 86400,
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 };
 
 module.exports = corsOptions; 
