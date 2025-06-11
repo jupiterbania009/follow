@@ -50,7 +50,7 @@ followSchema.statics.getFollowSuggestions = async function(userId, limit = 10) {
     return await mongoose.model('User').aggregate([
         {
             $match: {
-                _id: { $ne: mongoose.Types.ObjectId(userId) },
+                _id: { $ne: new mongoose.Types.ObjectId(userId) },
                 _id: { $nin: following }
             }
         },
