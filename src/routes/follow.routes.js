@@ -7,13 +7,13 @@ const {
     getFollowing,
     getFollowSuggestions
 } = require('../controllers/follow.controller');
-const { protect } = require('../middleware/auth.middleware');
+const { authenticateToken } = require('../middleware/auth.middleware');
 
 // Follow routes
-router.post('/:userId', protect, followUser);
-router.delete('/:userId', protect, unfollowUser);
-router.get('/followers/:userId', protect, getFollowers);
-router.get('/following/:userId', protect, getFollowing);
-router.get('/suggestions', protect, getFollowSuggestions);
+router.post('/:userId', authenticateToken, followUser);
+router.delete('/:userId', authenticateToken, unfollowUser);
+router.get('/followers/:userId', authenticateToken, getFollowers);
+router.get('/following/:userId', authenticateToken, getFollowing);
+router.get('/suggestions', authenticateToken, getFollowSuggestions);
 
 module.exports = router; 
