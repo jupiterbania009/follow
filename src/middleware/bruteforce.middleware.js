@@ -1,13 +1,14 @@
 const rateLimit = require('express-rate-limit');
 const Redis = require('ioredis');
+const config = require('../config/config');
 
 let redisClient = null;
 
 // Initialize Redis if configuration is available
-if (process.env.REDIS_URL) {
+if (config.REDIS_URL) {
   try {
     // Parse the Redis URL to get the host
-    const redisUrl = new URL(process.env.REDIS_URL);
+    const redisUrl = new URL(config.REDIS_URL);
     
     redisClient = new Redis({
       host: redisUrl.hostname,
@@ -25,8 +26,8 @@ if (process.env.REDIS_URL) {
         }
         return Math.min(times * 1000, 3000);
       },
-      tls: process.env.REDIS_URL.startsWith('rediss://') ? {
-        rejectUnauthorized: false, // Temporarily disable certificate verification
+      tls: config.REDIS_URL.startsWith('rediss://') ? {
+        rejectUnauthorized: false,
         minVersion: 'TLSv1.2'
       } : undefined
     });
@@ -59,7 +60,7 @@ const createRateLimiter = (windowMs, max, message) => {
     legacyHeaders: false,
     skip: (req) => {
       // Skip rate limiting in development
-      return process.env.NODE_ENV === 'development';
+      return config.NODE_ENV === 'development';
     }
   });
 };
