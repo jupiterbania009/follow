@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: instafollowx
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true 
