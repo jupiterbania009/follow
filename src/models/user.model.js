@@ -48,6 +48,20 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    instagramUsername: {
+        type: String,
+        sparse: true,
+        unique: true
+    },
+    instagramId: {
+        type: String,
+        sparse: true,
+        unique: true
+    },
+    isInstagramConnected: {
+        type: Boolean,
+        default: false
+    },
     lastActive: {
         type: Date,
         default: Date.now
