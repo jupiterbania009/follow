@@ -8,8 +8,8 @@ const getInstagramClient = (username, password) => {
   try {
     const cookieStore = createCookieStore(username);
     
-    // Instagram mobile user agent
-    const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1';
+    // Instagram mobile user agent - using Android device to improve reliability
+    const userAgent = 'Instagram 219.0.0.12.117 Android (30/11; 480dpi; 1080x2310; samsung; SM-G970F; beyond0; exynos9820; en_US; 346138365)';
     
     return new InstagramAPI({
       username,
@@ -24,8 +24,8 @@ const getInstagramClient = (username, password) => {
         'X-IG-WWW-Claim': '0',
         'X-Requested-With': 'XMLHttpRequest',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Origin': 'https://www.instagram.com',
-        'Referer': 'https://www.instagram.com/',
+        'Origin': 'https://i.instagram.com',
+        'Referer': 'https://i.instagram.com/',
       }
     });
   } catch (error) {
@@ -34,30 +34,92 @@ const getInstagramClient = (username, password) => {
     return new InstagramAPI({
       username,
       password,
-      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1'
+      userAgent: 'Instagram 219.0.0.12.117 Android (30/11; 480dpi; 1080x2310; samsung; SM-G970F; beyond0; exynos9820; en_US; 346138365)'
     });
   }
 };
 
-// Handle checkpoint challenge
-const handleCheckpoint = async (client, challengeUrl) => {
+// Extract challenge info from URL
+const extractChallengeInfo = (checkpointUrl) => {
   try {
-    // Request the challenge page
-    const challengeResponse = await client.request({
+    const url = new URL(checkpointUrl);
+    const challengePath = url.pathname.split('/');
+    const challengeId = challengePath[2];
+    const challengeContext = url.searchParams.get('challenge_context');
+    
+    return {
+      challengeId,
+      challengeContext,
+      fullUrl: checkpointUrl
+    };
+  } catch (error) {
+    console.error('Error extracting challenge info:', error);
+    throw error;
+  }
+};
+
+// Handle checkpoint challenge
+const handleCheckpoint = async (client, checkpointUrl) => {
+  try {
+    const challengeInfo = extractChallengeInfo(checkpointUrl);
+    console.log('Challenge info:', challengeInfo);
+
+    // First API call - Get initial challenge state
+    const initialResponse = await client.request({
       method: 'GET',
-      url: challengeUrl,
+      url: `https://i.instagram.com/api/v1/challenge/${challengeInfo.challengeId}/`,
       headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': client.state.userAgent,
+        'X-IG-App-ID': '936619743392459',
+        'X-Instagram-AJAX': '1',
       }
     });
 
-    // Extract challenge details
+    console.log('Initial challenge response:', initialResponse);
+
+    // Second API call - Request verification code
+    const verificationResponse = await client.request({
+      method: 'POST',
+      url: `https://i.instagram.com/api/v1/challenge/${challengeInfo.challengeId}/request_code/`,
+      form: {
+        choice: 1, // 1 for email, 0 for phone
+        _csrftoken: client.state.cookieJar.getCookies('csrftoken'),
+        guid: client.state.uuid,
+        device_id: client.state.deviceId,
+        android_id: client.state.deviceId,
+        challenge_context: challengeInfo.challengeContext,
+        bloks_versioning_id: '8f05e753340a3a4e93ae9c0809e6d39f3501752d10064c85db3a635f5426a035'
+      },
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': client.state.userAgent,
+        'X-IG-App-ID': '936619743392459',
+        'X-Instagram-AJAX': '1'
+      }
+    });
+
+    console.log('Verification request response:', verificationResponse);
+
+    if (!verificationResponse.status || verificationResponse.status !== 'ok') {
+      throw new Error('Failed to request verification code: ' + JSON.stringify(verificationResponse));
+    }
+
+    // Get the contact information where code was sent
+    const contactInfo = verificationResponse.step_data?.contact_point || 'your email/phone';
+
     return {
-      challengeType: challengeResponse.step_name,
-      challengeData: challengeResponse,
-      verificationMethods: challengeResponse.step_data,
-      checkpointUrl: challengeUrl
+      challengeType: 'verification_code',
+      challengeData: {
+        ...initialResponse,
+        verificationResponse
+      },
+      verificationMethods: ['email', 'phone'],
+      checkpointUrl: checkpointUrl,
+      challengeInfo,
+      contactPoint: contactInfo
     };
   } catch (error) {
     console.error('Error handling checkpoint:', error);
@@ -115,31 +177,37 @@ exports.connectInstagram = async (req, res) => {
       // Handle checkpoint challenge
       if (loginError.message.includes('checkpoint_required')) {
         try {
-          const challengeInfo = await handleCheckpoint(client, loginError.checkpoint_url);
+          const checkpointUrl = loginError.checkpoint_url;
+          const challengeInfo = await handleCheckpoint(client, checkpointUrl);
           
           // Store checkpoint information in user session for later use
           req.session.instagramCheckpoint = {
             username: instagramUsername,
-            challengeUrl: challengeInfo.checkpointUrl,
+            password: instagramPassword, // Needed for verification process
+            challengeUrl: checkpointUrl,
+            challengeInfo: challengeInfo.challengeInfo,
             timestamp: new Date()
           };
 
           return res.status(403).json({
             success: false,
-            message: 'Instagram security checkpoint required',
+            message: `Instagram security code has been sent to ${challengeInfo.contactPoint}`,
             error: 'checkpoint_required',
             checkpoint: {
               type: challengeInfo.challengeType,
               methods: challengeInfo.verificationMethods,
-              url: challengeInfo.checkpointUrl
+              url: checkpointUrl,
+              challengeInfo: challengeInfo.challengeInfo,
+              contactPoint: challengeInfo.contactPoint
             }
           });
         } catch (checkpointError) {
           console.error('Checkpoint handling error:', checkpointError);
           return res.status(403).json({
             success: false,
-            message: 'Unable to process Instagram security checkpoint',
-            error: 'checkpoint_error'
+            message: 'Unable to send verification code. Please try again or log in to Instagram app directly.',
+            error: 'checkpoint_error',
+            details: checkpointError.message
           });
         }
       }
@@ -182,20 +250,34 @@ exports.submitVerificationCode = async (req, res) => {
       });
     }
 
-    const client = getInstagramClient(checkpointInfo.username);
+    const client = getInstagramClient(checkpointInfo.username, checkpointInfo.password);
 
     // Submit the verification code
     try {
       const verifyResponse = await client.request({
         method: 'POST',
-        url: checkpointInfo.challengeUrl,
+        url: `https://i.instagram.com/api/v1/challenge/${checkpointInfo.challengeInfo.challengeId}/verify/`,
         form: {
           security_code: code,
-          csrftoken: client.state.cookieJar.getCookies('csrftoken')
+          _csrftoken: client.state.cookieJar.getCookies('csrftoken'),
+          guid: client.state.uuid,
+          device_id: client.state.deviceId,
+          android_id: client.state.deviceId,
+          challenge_context: checkpointInfo.challengeInfo.challengeContext,
+          bloks_versioning_id: '8f05e753340a3a4e93ae9c0809e6d39f3501752d10064c85db3a635f5426a035'
+        },
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': client.state.userAgent,
+          'X-IG-App-ID': '936619743392459',
+          'X-Instagram-AJAX': '1'
         }
       });
 
-      if (verifyResponse.status === 'ok') {
+      console.log('Verification response:', verifyResponse);
+
+      if (verifyResponse.status === 'ok' || verifyResponse.logged_in_user) {
         // Clear checkpoint info from session
         delete req.session.instagramCheckpoint;
 
