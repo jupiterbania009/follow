@@ -78,10 +78,21 @@ const extractChallengeInfo = (checkpointUrl) => {
 // Handle checkpoint challenge
 const handleCheckpoint = async (client, checkpointUrl) => {
   try {
+    console.log('Handling checkpoint challenge with URL:', checkpointUrl);
+    
+    if (!checkpointUrl) {
+      throw new Error('No checkpoint URL provided to handleCheckpoint');
+    }
+
     const challengeInfo = extractChallengeInfo(checkpointUrl);
-    console.log('Challenge info:', challengeInfo);
+    console.log('Extracted challenge info:', challengeInfo);
+
+    if (!challengeInfo || !challengeInfo.challengeId) {
+      throw new Error('Failed to extract valid challenge info from URL');
+    }
 
     // First API call - Get initial challenge state
+    console.log('Getting initial challenge state...');
     const initialResponse = await client.request({
       method: 'GET',
       url: `https://i.instagram.com/api/v1/challenge/${challengeInfo.challengeId}/`,
@@ -96,7 +107,12 @@ const handleCheckpoint = async (client, checkpointUrl) => {
 
     console.log('Initial challenge response:', initialResponse);
 
+    if (!initialResponse || initialResponse.status === 'fail') {
+      throw new Error('Failed to get challenge info: ' + JSON.stringify(initialResponse));
+    }
+
     // Second API call - Request verification code
+    console.log('Requesting verification code...');
     const verificationResponse = await client.request({
       method: 'POST',
       url: `https://i.instagram.com/api/v1/challenge/${challengeInfo.challengeId}/request_code/`,
@@ -120,13 +136,15 @@ const handleCheckpoint = async (client, checkpointUrl) => {
 
     console.log('Verification request response:', verificationResponse);
 
-    if (!verificationResponse.status || verificationResponse.status !== 'ok') {
+    if (!verificationResponse || verificationResponse.status === 'fail') {
       throw new Error('Failed to request verification code: ' + JSON.stringify(verificationResponse));
     }
 
     // Update challenge info with contact point if available
     if (verificationResponse.step_data && verificationResponse.step_data.contact_point) {
       challengeInfo.contactPoint = verificationResponse.step_data.contact_point;
+    } else if (initialResponse.step_data && initialResponse.step_data.contact_point) {
+      challengeInfo.contactPoint = initialResponse.step_data.contact_point;
     }
 
     // Update verification methods if available
@@ -191,17 +209,41 @@ exports.connectInstagram = async (req, res) => {
       });
     } catch (loginError) {
       console.error('Instagram login error:', loginError);
+      console.log('Login error response structure:', {
+        error: loginError.error,
+        body: loginError.body,
+        message: loginError.message,
+        response: loginError.response,
+        checkpoint_url: loginError.checkpoint_url,
+        raw: loginError
+      });
       
       // Handle checkpoint challenge
       if (loginError.message.includes('checkpoint_required')) {
         try {
-          const checkpointUrl = loginError.checkpoint_url;
+          // Extract checkpoint URL from error response
+          let checkpointUrl;
+          if (loginError.error && loginError.error.checkpoint_url) {
+            checkpointUrl = loginError.error.checkpoint_url;
+          } else if (loginError.body && loginError.body.checkpoint_url) {
+            checkpointUrl = loginError.body.checkpoint_url;
+          } else if (loginError.checkpoint_url) {
+            checkpointUrl = loginError.checkpoint_url;
+          } else if (loginError.response && loginError.response.body && loginError.response.body.checkpoint_url) {
+            checkpointUrl = loginError.response.body.checkpoint_url;
+          } else {
+            console.error('No checkpoint URL found in error response:', loginError);
+            throw new Error('Checkpoint URL not found in response');
+          }
+
+          console.log('Extracted checkpoint URL:', checkpointUrl);
+          
           const challengeInfo = await handleCheckpoint(client, checkpointUrl);
           
           // Store checkpoint information in user session for later use
           req.session.instagramCheckpoint = {
             username: instagramUsername,
-            password: instagramPassword, // Needed for verification process
+            password: instagramPassword,
             challengeUrl: checkpointUrl,
             challengeInfo: challengeInfo.challengeInfo,
             timestamp: new Date()
