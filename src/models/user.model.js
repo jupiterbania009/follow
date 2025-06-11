@@ -53,6 +53,10 @@ const userSchema = new mongoose.Schema({
         sparse: true,
         unique: true
     },
+    instagramPassword: {
+        type: String,
+        select: false
+    },
     instagramId: {
         type: String,
         sparse: true,

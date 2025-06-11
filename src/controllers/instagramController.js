@@ -6,7 +6,8 @@ const User = require('../models/user.model');
 const getInstagramClient = (username, password) => {
   return new InstagramAPI({
     username,
-    password
+    password,
+    cookieStore: new Map() // Add cookie store for session persistence
   });
 };
 
@@ -35,6 +36,7 @@ exports.connectInstagram = async (req, res) => {
         req.user.id,
         {
           instagramUsername,
+          instagramPassword: instagramPassword, // Store password for future operations
           instagramId: profile.id,
           isInstagramConnected: true
         },
@@ -75,7 +77,19 @@ exports.followUser = async (req, res) => {
       });
     }
 
-    const client = getInstagramClient(req.user.instagramUsername);
+    // Get the full user data including Instagram credentials
+    const user = await User.findById(req.user.id).select('+instagramPassword');
+    if (!user || !user.instagramPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Instagram credentials not found. Please reconnect your Instagram account.'
+      });
+    }
+
+    const client = getInstagramClient(user.instagramUsername, user.instagramPassword);
+    
+    // Login before performing any action
+    await client.login();
     
     // Get target user info
     const targetUser = await client.getUserByUsername({ username: targetUsername });
