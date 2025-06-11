@@ -14,6 +14,7 @@ const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const followRoutes = require('./routes/follow.routes');
 const reviewRoutes = require('./routes/review.routes');
+const instagramRoutes = require('./routes/instagramRoutes');
 
 // Import configurations and middleware
 const corsOptions = require('./config/cors.config');
@@ -75,6 +76,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/follows', followRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/instagram', instagramRoutes);
 
 // Error handler for CORS
 app.use(corsErrorHandler);
