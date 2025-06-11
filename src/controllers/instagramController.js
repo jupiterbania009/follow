@@ -4,8 +4,8 @@ const User = require('../models/user.model');
 const { createCookieStore } = require('../utils/cookieStore');
 
 // Instagram client configuration
-const getInstagramClient = (username, password) => {
-  const cookieStore = createCookieStore(username);
+const getInstagramClient = async (username, password) => {
+  const cookieStore = await createCookieStore(username);
   return new InstagramAPI({
     username,
     password,
@@ -27,7 +27,7 @@ exports.connectInstagram = async (req, res) => {
     }
 
     console.log('Creating Instagram client...');
-    const client = getInstagramClient(instagramUsername, instagramPassword);
+    const client = await getInstagramClient(instagramUsername, instagramPassword);
     
     try {
       console.log('Attempting to login to Instagram...');
@@ -102,7 +102,7 @@ exports.followUser = async (req, res) => {
     }
 
     console.log('Creating Instagram client for follow operation...');
-    const client = getInstagramClient(user.instagramUsername, user.instagramPassword);
+    const client = await getInstagramClient(user.instagramUsername, user.instagramPassword);
     
     try {
       // Login before performing any action
