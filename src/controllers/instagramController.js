@@ -1,6 +1,6 @@
 const InstagramAPI = require('instagram-web-api');
 const InstagramFollow = require('../models/InstagramFollow');
-const User = require('../models/User');
+const User = require('../models/user.model');
 
 // Instagram client configuration
 const getInstagramClient = (username, password) => {
