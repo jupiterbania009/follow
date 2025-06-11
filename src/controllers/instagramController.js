@@ -5,12 +5,38 @@ const { createCookieStore } = require('../utils/cookieStore');
 
 // Instagram client configuration
 const getInstagramClient = (username, password) => {
-  const cookieStore = createCookieStore(username);
-  return new InstagramAPI({
-    username,
-    password,
-    cookieStore
-  });
+  try {
+    const cookieStore = createCookieStore(username);
+    
+    // Instagram mobile user agent
+    const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1';
+    
+    return new InstagramAPI({
+      username,
+      password,
+      cookieStore,
+      userAgent,
+      // Additional Instagram client options
+      language: 'en-US',
+      timezoneOffset: new Date().getTimezoneOffset(),
+      headers: {
+        'X-IG-App-ID': '936619743392459',
+        'X-IG-WWW-Claim': '0',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Origin': 'https://www.instagram.com',
+        'Referer': 'https://www.instagram.com/',
+      }
+    });
+  } catch (error) {
+    console.error('Error creating Instagram client:', error);
+    // If cookie store fails, try with minimal configuration
+    return new InstagramAPI({
+      username,
+      password,
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1'
+    });
+  }
 };
 
 // Connect Instagram account
@@ -31,23 +57,58 @@ exports.connectInstagram = async (req, res) => {
 
     // Test the connection by trying to login
     console.log('Attempting to login to Instagram...');
-    await client.login();
+    try {
+      const loginResponse = await client.login();
+      console.log('Instagram login response:', loginResponse);
 
-    // If login successful, update user's Instagram credentials
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      {
-        instagramUsername,
-        instagramConnected: true
-      },
-      { new: true }
-    );
+      if (!loginResponse.authenticated) {
+        throw new Error('Authentication failed');
+      }
 
-    res.status(200).json({
-      success: true,
-      message: 'Instagram account connected successfully',
-      user
-    });
+      console.log('Instagram login successful');
+
+      // If login successful, update user's Instagram credentials
+      const user = await User.findByIdAndUpdate(
+        req.user._id,
+        {
+          instagramUsername,
+          instagramConnected: true,
+          lastInstagramLogin: new Date()
+        },
+        { new: true }
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Instagram account connected successfully',
+        user
+      });
+    } catch (loginError) {
+      console.error('Instagram login error:', loginError);
+      
+      // Check for specific error types
+      if (loginError.message.includes('checkpoint_required')) {
+        return res.status(403).json({
+          success: false,
+          message: 'Instagram security checkpoint required. Please log in to Instagram directly and complete the verification.',
+          error: 'checkpoint_required'
+        });
+      }
+      
+      if (loginError.message.includes('bad_password')) {
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect Instagram password.',
+          error: 'bad_password'
+        });
+      }
+
+      return res.status(401).json({
+        success: false,
+        message: 'Failed to login to Instagram. Please check your credentials.',
+        error: loginError.message
+      });
+    }
   } catch (error) {
     console.error('Instagram connection error:', error);
     res.status(500).json({
