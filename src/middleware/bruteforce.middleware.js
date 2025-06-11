@@ -1,19 +1,26 @@
 const rateLimit = require('express-rate-limit');
-const RedisStore = require('rate-limit-redis');
+const { RedisStore } = require('rate-limit-redis');
 const Redis = require('ioredis');
 
 // Create Redis client
 const redisClient = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
   port: process.env.REDIS_PORT || 6379,
-  password: process.env.REDIS_PASSWORD
+  password: process.env.REDIS_PASSWORD,
+  enableOfflineQueue: false
+});
+
+// Handle Redis connection errors
+redisClient.on('error', (err) => {
+  console.error('Redis error:', err);
 });
 
 const bruteForceMiddleware = {
   // Login attempt limiter
   loginLimiter: rateLimit({
     store: new RedisStore({
-      sendCommand: (...args) => redisClient.call(...args)
+      client: redisClient,
+      prefix: 'login_limit:'
     }),
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 5, // 5 attempts
@@ -31,7 +38,8 @@ const bruteForceMiddleware = {
   // Registration limiter
   registrationLimiter: rateLimit({
     store: new RedisStore({
-      sendCommand: (...args) => redisClient.call(...args)
+      client: redisClient,
+      prefix: 'register_limit:'
     }),
     windowMs: 60 * 60 * 1000, // 1 hour
     max: 3, // 3 attempts
@@ -49,7 +57,8 @@ const bruteForceMiddleware = {
   // API rate limiter
   apiLimiter: rateLimit({
     store: new RedisStore({
-      sendCommand: (...args) => redisClient.call(...args)
+      client: redisClient,
+      prefix: 'api_limit:'
     }),
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100, // 100 requests
@@ -64,7 +73,8 @@ const bruteForceMiddleware = {
   // Specific endpoint limiter (for sensitive operations)
   sensitiveOpLimiter: rateLimit({
     store: new RedisStore({
-      sendCommand: (...args) => redisClient.call(...args)
+      client: redisClient,
+      prefix: 'sensitive_limit:'
     }),
     windowMs: 60 * 60 * 1000, // 1 hour
     max: 10, // 10 attempts
