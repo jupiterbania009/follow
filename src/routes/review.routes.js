@@ -3,10 +3,17 @@ const router = express.Router();
 const { authenticateToken } = require('../middleware/auth.middleware');
 
 // Submit a review
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, (req, res) => {
     try {
         const { targetUserId, rating, comment } = req.body;
-        const reviewer = await req.user;
+        const reviewer = req.user;
+
+        if (!reviewer) {
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated'
+            });
+        }
 
         // Basic validation
         if (!targetUserId || !rating) {
@@ -27,10 +34,17 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Get reviews for a user
-router.get('/user/:userId', async (req, res) => {
+router.get('/user/:userId', (req, res) => {
     try {
         const { userId } = req.params;
         
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'User ID is required'
+            });
+        }
+
         // Get reviews logic here
         res.json({
             success: true,
