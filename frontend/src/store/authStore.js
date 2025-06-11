@@ -62,6 +62,10 @@ const useAuthStore = create((set) => ({
     }
   },
 
+  updateUser: (updatedUser) => {
+    set({ user: updatedUser });
+  },
+
   clearError: () => set({ error: null }),
 }));
 
