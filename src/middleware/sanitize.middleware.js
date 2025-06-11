@@ -1,54 +1,39 @@
-const xss = require('xss');
 const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss');
 
-const sanitizeData = (obj) => {
-  if (Array.isArray(obj)) {
-    return obj.map(v => sanitizeData(v));
-  }
-  if (typeof obj === 'object' && obj !== null) {
-    return Object.keys(obj).reduce((result, key) => {
-      result[key] = sanitizeData(obj[key]);
-      return result;
-    }, {});
-  }
-  if (typeof obj === 'string') {
-    return xss(obj);
-  }
-  return obj;
-};
-
-const sanitizeMiddleware = {
-  // Sanitize request body, query, and params
-  sanitizeRequest: (req, res, next) => {
-    if (req.body) {
-      req.body = sanitizeData(req.body);
-    }
-    if (req.query) {
-      req.query = sanitizeData(req.query);
-    }
-    if (req.params) {
-      req.params = sanitizeData(req.params);
-    }
-    next();
-  },
-
-  // MongoDB query sanitization
-  mongoSanitize: mongoSanitize({
-    allowDots: true,
-    replaceWith: '_'
-  }),
-
-  // Clean response data
-  sanitizeResponse: (req, res, next) => {
-    const originalSend = res.send;
-    res.send = function (body) {
-      if (body && typeof body === 'object') {
-        body = sanitizeData(body);
+// Sanitize request data
+const sanitizeRequest = (req, res, next) => {
+  if (req.body) {
+    // Sanitize request body for XSS
+    Object.keys(req.body).forEach(key => {
+      if (typeof req.body[key] === 'string') {
+        req.body[key] = xss(req.body[key]);
       }
-      return originalSend.call(this, body);
-    };
-    next();
+    });
   }
+  next();
 };
 
-module.exports = sanitizeMiddleware; 
+// Sanitize response data
+const sanitizeResponse = (req, res, next) => {
+  const originalSend = res.send;
+  res.send = function(data) {
+    if (typeof data === 'string') {
+      data = xss(data);
+    } else if (typeof data === 'object') {
+      Object.keys(data).forEach(key => {
+        if (typeof data[key] === 'string') {
+          data[key] = xss(data[key]);
+        }
+      });
+    }
+    originalSend.call(this, data);
+  };
+  next();
+};
+
+module.exports = {
+  mongoSanitize: mongoSanitize(),
+  sanitizeRequest,
+  sanitizeResponse
+}; 
