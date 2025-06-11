@@ -39,18 +39,35 @@ const getInstagramClient = (username, password) => {
   }
 };
 
-// Extract challenge info from URL
+// Extract challenge info from checkpoint URL
 const extractChallengeInfo = (checkpointUrl) => {
   try {
-    const url = new URL(checkpointUrl);
-    const challengePath = url.pathname.split('/');
-    const challengeId = challengePath[2];
-    const challengeContext = url.searchParams.get('challenge_context');
-    
+    if (!checkpointUrl) {
+      throw new Error('No checkpoint URL provided');
+    }
+
+    // Extract challenge ID from the URL
+    const challengeMatch = checkpointUrl.match(/challenge\/([^/]+)\//);
+    const challengeId = challengeMatch ? challengeMatch[1] : null;
+
+    if (!challengeId) {
+      throw new Error('Could not extract challenge ID from URL');
+    }
+
+    // Extract challenge context from the URL
+    const contextMatch = checkpointUrl.match(/challenge_context=([^&]+)/);
+    const challengeContext = contextMatch ? decodeURIComponent(contextMatch[1]) : null;
+
+    if (!challengeContext) {
+      throw new Error('Could not extract challenge context from URL');
+    }
+
     return {
       challengeId,
       challengeContext,
-      fullUrl: checkpointUrl
+      challengeType: 'email', // Default to email verification
+      verificationMethods: ['email'],
+      contactPoint: 'your registered email' // Default message
     };
   } catch (error) {
     console.error('Error extracting challenge info:', error);
@@ -107,19 +124,20 @@ const handleCheckpoint = async (client, checkpointUrl) => {
       throw new Error('Failed to request verification code: ' + JSON.stringify(verificationResponse));
     }
 
-    // Get the contact information where code was sent
-    const contactInfo = verificationResponse.step_data?.contact_point || 'your email/phone';
+    // Update challenge info with contact point if available
+    if (verificationResponse.step_data && verificationResponse.step_data.contact_point) {
+      challengeInfo.contactPoint = verificationResponse.step_data.contact_point;
+    }
+
+    // Update verification methods if available
+    if (verificationResponse.step_data && verificationResponse.step_data.choice) {
+      challengeInfo.verificationMethods = [verificationResponse.step_data.choice === 1 ? 'email' : 'phone'];
+      challengeInfo.challengeType = verificationResponse.step_data.choice === 1 ? 'email' : 'phone';
+    }
 
     return {
-      challengeType: 'verification_code',
-      challengeData: {
-        ...initialResponse,
-        verificationResponse
-      },
-      verificationMethods: ['email', 'phone'],
-      checkpointUrl: checkpointUrl,
       challengeInfo,
-      contactPoint: contactInfo
+      contactPoint: challengeInfo.contactPoint
     };
   } catch (error) {
     console.error('Error handling checkpoint:', error);
